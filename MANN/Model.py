@@ -56,3 +56,19 @@ def memory_augmented_neural_network(input_var, target_var, \
         ww_t = tf.reshape((batch_size, nb_reads, memory_shape[0]))
 
         M_t = tf.scatter_update(M_tm1, [tf.range(0,batch_size),wlu_tm1[:,0],], 0.)
+        M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]), a_t))   #(batch_size, memory_size[0], memory_size[1])
+        K_t = cosine_similarity(k_t, M_t)
+
+        wr_t = tf.nn.softmax(tf.reshape(K_t, (batch_size*nb_reads, memory_shape[0])))
+        wr_t = tf.reshape(wr_t, (batch_size, nb_reads, memory_shape[0]))    #(batch_size, nb_reads, memory_size[0])
+
+        wu_t = gamma * wu_tm1 + tf.sum(wr_t, axis=1) + tf.sum(ww_t, axis=1) #(batch_size, memory_size[0])
+
+        r_t = tf.reshape(tf.batch_matmul(wr_t, M_t),[batch_size,-1])
+
+        return (M_t, c_t, h_t, r_t, wr_t, wu_t)
+
+    #Model Part:
+    sequence_length_var = target_var.shape[1]
+    output_shape_var = (batch_size * sequence_length_var, nb_class)
+
