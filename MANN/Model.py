@@ -26,7 +26,7 @@ def memory_augmented_neural_network(input_var, target_var, \
     W_xh, b_h = weight_and_bias_init((input_size + nb_class, 4 * controller_size),name='xh')
     W_rh = shared_glorot_uniform((nb_reads * memory_shape[1], 4 * controller_size), name='W_rh')
     W_hh = shared_glorot_uniform((controller_size, 4*controller_size),name='W_hh')
-    W_o, b_o = weight_and_bias_init((controller_size + nb_reads * memory_shape[1]),name='o')
+    W_o, b_o = weight_and_bias_init((controller_size + nb_reads * memory_shape[1], nb_class),name='o')
     gamma = 0.95
 
     def slice_equally(x, size, nb_slice):
@@ -48,4 +48,11 @@ def memory_augmented_neural_network(input_var, target_var, \
         a_t = tf.tanh(tf.mul(h_t,W_add) + b_add)
         sigma_t = tf.sigmoid(tf.mul(h_t,W_sigma) + b_sigma)  #(batch_size, nb_reads, 1)
 
-        wlu_tm1 = tf.nn.top_k()
+        _,temp_indices = tf.nn.top_k(wu_tm1, memory_shape[0])
+        wlu_tm1 = tf.slice(temp_indices, [0,0], [batch_size,nb_reads])    #(batch_size, nb_reads)
+
+        ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))
+        ww_t = tf.scatter_add(ww_t, [tf.range(0, nb_reads*memory_shape[0]), tf.reshape(wlu_tm1,[-1])],1.0 - sigma_t)
+        ww_t = tf.reshape((batch_size, nb_reads, memory_shape[0]))
+
+        M_t = tf.scatter_update(M_tm1, [tf.range(0,batch_size),wlu_tm1[:,0],], 0.)

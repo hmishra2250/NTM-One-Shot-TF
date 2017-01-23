@@ -1,3 +1,4 @@
+import tensorflow
 import tensorflow as tf
 import numpy as np
 import sys
@@ -8,8 +9,7 @@ def shared_glorot_uniform(shape, dtype=tf.float32, name='', n=None):
 		shape = [shape]
 	else:
 		high = np.sqrt(6. / (np.sum(shape[:2]) * np.prod(shape[2:])))
-	sys.stdout.flush()
-	shape = shape if n is None else list(n) + list(shape)
+	shape = shape if n is None else [	n] + list(shape)
 	return tf.Variable(tf.random_uniform(shape, minval=-high, maxval=high, dtype=dtype, name=name))
 	
 def shared_zeros(shape, dtype=tf.float32, name='', n=None):
@@ -19,9 +19,9 @@ def shared_zeros(shape, dtype=tf.float32, name='', n=None):
 def shared_one_hot(shape, dtype=tf.float32, name='', n=None):
 	shape = (shape,) if isinstance(shape,int) else shape
 	shape = shape if n is None else (n,) + shape
-	initial_vector = tf.zeros(shape, dtype=dtype)
+	initial_vector = np.zeros(shape, dtype=np.float32)
 	initial_vector[...,0] = 1
-	return tf.Variable(initial_vector, name=name)
+	return tf.Variable(tf.cast(initial_vector, tf.float32), name=name)
 	
 def weight_and_bias_init(shape, dtype=tf.float32, name='', n=None):
 	return (shared_glorot_uniform(shape, dtype=dtype, name='W_' + name, n=n), \
