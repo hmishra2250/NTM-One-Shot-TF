@@ -30,10 +30,12 @@ def memory_augmented_neural_network(input_var, target_var, \
     gamma = 0.95
 
     def slice_equally(x, size, nb_slice):
+        # type: (object, object, object) -> object
         return [x[:,n*size:(n+1)*size] for n in range(nb_slice)]
 
-    def step(x_t, M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1):
+    def step(X_t, M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1, ix):
 
+        x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
         preactivations = tf.mul(x_t,W_xh) + tf.mul(r_tm1,W_rh) + tf.mul(h_tm1,W_hh) + b_h
         gf_, gi_, go_, u_ = slice_equally(preactivations, controller_size, 4)
         gf = tf.sigmoid(gf_)
@@ -56,7 +58,7 @@ def memory_augmented_neural_network(input_var, target_var, \
         ww_t = tf.reshape((batch_size, nb_reads, memory_shape[0]))
 
         M_t = tf.scatter_update(M_tm1, [tf.range(0,batch_size),wlu_tm1[:,0],], 0.)
-        M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]), a_t))   #(batch_size, memory_size[0], memory_size[1])
+        M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
         wr_t = tf.nn.softmax(tf.reshape(K_t, (batch_size*nb_reads, memory_shape[0])))
@@ -65,10 +67,30 @@ def memory_augmented_neural_network(input_var, target_var, \
         wu_t = gamma * wu_tm1 + tf.sum(wr_t, axis=1) + tf.sum(ww_t, axis=1) #(batch_size, memory_size[0])
 
         r_t = tf.reshape(tf.batch_matmul(wr_t, M_t),[batch_size,-1])
+        ix = tf.add(ix,tf.constant(1,dtype=tf.int32))  #incrementing index
 
-        return (M_t, c_t, h_t, r_t, wr_t, wu_t)
+        return (M_t, c_t, h_t, r_t, wr_t, wu_t, ix)
 
     #Model Part:
-    sequence_length_var = target_var.shape[1]
-    output_shape_var = (batch_size * sequence_length_var, nb_class)
+    sequence_length_var = target_var.shape[1]   #length of the input
+    output_shape_var = (batch_size * sequence_length_var, nb_class)     #(batch_size*sequence_length_vat,nb_class)
 
+    # Input concat with time offset
+    one_hot_target_flattened = tf.one_hot(output_shape_var, depth=nb_class)
+    one_hot_target = tf.reshape(one_hot_target_flattened, (batch_size, sequence_length_var, nb_class))    #(batch_size, sequence_var_length, nb_class)
+    offset_target_var = tf.concat_v2([tf.zeros_like(tf.expand_dims(one_hot_target[:,0],1)),one_hot_target[:,:-1]],axis=1)   #(batch_size, sequence_var_length, nb_class)
+    l_input_var = tf.concat_v2([input_var,offset_target_var],axis=2)    #(batch_size, sequence_var_length, input_size+nb_class)
+
+    ix = tf.variable(0,dtype=tf.int32)
+    cond = lambda M_0, c_0, h_0, r_0, wr_0, wu_0, ix: ix < sequence_length_var
+    l_ntm_var = tf.while_loop(cond, body=step,loop_vars=[M_0, c_0, h_0, r_0, wr_0, wu_0, ix])
+    l_ntm_output_var = tf.transpose(tf.concatenate(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])
+
+    output_var_preactivation = tf.add(tf.matmul(l_ntm_output_var,W_o), b_o)
+    output_var_flatten = tf.nn.softmax(tf.reshape(output_var_preactivation, output_shape_var))
+    output_var = tf.reshape(output_var_flatten, output_var_preactivation.shape)
+
+    #Parameters
+    params = [W_key, b_key, W_add, b_add, W_sigma, b_sigma, W_xh, W_rh, W_hh, b_h, W_o, b_o]
+
+    return output_var, output_var_flatten, params
