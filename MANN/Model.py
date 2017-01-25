@@ -71,10 +71,10 @@ def memory_augmented_neural_network(input_var, target_var, \
         wlu_tm1 = tf.slice(temp_indices, [0,0], [batch_size,nb_reads])    #(batch_size, nb_reads)
 
         ww_t = tf.Variable(tf.reshape(tf.matmul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0])), validate_shape=False)    #(batch_size*nb_reads, memory_shape[0])
-        ww_t = update_tensor(ww_t, [tf.range(0, nb_reads*memory_shape[0])], [tf.reshape(wlu_tm1,[-1])],1.0 - sigma_t)
+        ww_t = update_tensor(ww_t, nb_reads*memory_shape[0], tf.reshape(wlu_tm1,[-1]),1.0 - sigma_t)
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
-        M_t = update_tensor(M_tm1, [tf.range(0,batch_size)],[wlu_tm1[:,0],], 0.)
+        M_t = update_tensor(M_tm1, batch_size, wlu_tm1[:,0], 0.)
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
