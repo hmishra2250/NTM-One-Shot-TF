@@ -33,6 +33,23 @@ def memory_augmented_neural_network(input_var, target_var, \
         # type: (object, object, object) -> object
         return [x[:,n*size:(n+1)*size] for n in range(nb_slice)]
 
+    def update_tensor(V, dim1, dim2, val):  #Update tensor V, with index[dim1,dim2] by val
+        ix = tf.Variable(0)
+        Z = None
+        cond = lambda V, Z, d1,d2,ix: ix<d1
+        def body(V,Z,d1,d2,ix):
+            temp = tf.Variable(V[ix], validate_shape=False)
+            temp = tf.scatter_update(temp, d2[ix],val)
+            if Z is not None:
+                Z = tf.concat_v2([Z,temp], axis=0)
+            else:
+                Z = temp
+            with tf.control_dependencies([Z]):
+                return V,Z,d1,d2,ix+1
+        tf.while_loop(cond,body,[V,Z,dim1,dim2,ix])
+        return Z
+
+
     def step(x_t, M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1):
 
         #x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
@@ -53,18 +70,18 @@ def memory_augmented_neural_network(input_var, target_var, \
         _,temp_indices = tf.nn.top_k(wu_tm1, memory_shape[0])
         wlu_tm1 = tf.slice(temp_indices, [0,0], [batch_size,nb_reads])    #(batch_size, nb_reads)
 
-        ww_t = tf.reshape(tf.matmul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))
-        ww_t = tf.scatter_add(ww_t, [tf.range(0, nb_reads*memory_shape[0]), tf.reshape(wlu_tm1,[-1])],1.0 - sigma_t)
-        ww_t = tf.reshape((batch_size, nb_reads, memory_shape[0]))
+        ww_t = tf.Variable(tf.reshape(tf.matmul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0])), validate_shape=False)    #(batch_size*nb_reads, memory_shape[0])
+        ww_t = update_tensor(ww_t, [tf.range(0, nb_reads*memory_shape[0])], [tf.reshape(wlu_tm1,[-1])],1.0 - sigma_t)
+        ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
-        M_t = tf.scatter_update(M_tm1, [tf.range(0,batch_size),wlu_tm1[:,0],], 0.)
+        M_t = update_tensor(M_tm1, [tf.range(0,batch_size)],[wlu_tm1[:,0],], 0.)
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
         wr_t = tf.nn.softmax(tf.reshape(K_t, (batch_size*nb_reads, memory_shape[0])))
         wr_t = tf.reshape(wr_t, (batch_size, nb_reads, memory_shape[0]))    #(batch_size, nb_reads, memory_size[0])
 
-        wu_t = gamma * wu_tm1 + tf.sum(wr_t, axis=1) + tf.sum(ww_t, axis=1) #(batch_size, memory_size[0])
+        wu_t = gamma * wu_tm1 + tf.reduce_sum(wr_t, axis=1) + tf.reduce_sum(ww_t, axis=1) #(batch_size, memory_size[0])
 
         r_t = tf.reshape(tf.batch_matmul(wr_t, M_t),[batch_size,-1])
         #ix = tf.add(ix,tf.constant(1,dtype=tf.int32))  #incrementing index
@@ -84,7 +101,7 @@ def memory_augmented_neural_network(input_var, target_var, \
     #ix = tf.variable(0,dtype=tf.int32)
     #cond = lambda M_0, c_0, h_0, r_0, wr_0, wu_0, ix: ix < sequence_length_var
     l_ntm_var = tf.scan(step, elems=tf.transpose(l_input_var, perm=[1,0,2]),initializer=[M_0, c_0, h_0, r_0, wr_0, wu_0])   #Set of all above parameters, as list
-    l_ntm_output_var = tf.transpose(tf.concatenate(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])     #h_t & r_t, size=(batch_size, sequence_var_length, controller_size+nb_reads*memory_size[1])
+    l_ntm_output_var = tf.transpose(tf.concat_v2(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])     #h_t & r_t, size=(batch_size, sequence_var_length, controller_size+nb_reads*memory_size[1])
 
     output_var_preactivation = tf.add(tf.matmul(l_ntm_output_var,W_o), b_o)
     output_var_flatten = tf.nn.softmax(tf.reshape(output_var_preactivation, output_shape_var))
