@@ -4,10 +4,10 @@ Tensorflow implementation of the paper *One-shot Learning with Memory-Augmented 
 Current Progress of Implementation:
 - [x]  Utility Functions:
   - [x] Image Handler
-  - [x] Metrics
-  - [x] Similarities
-- [x] LSTM Controller
-- [x] Generator
+  - [x] Metrics (Accuracy)
+  - [x] Similarities (Cosine Similarity)
+- [x] LSTM Controller and Memory Unit
+- [x] Batch Generators
 - [ ] Omniglot Tester Code
 - [ ] Unsupervised Feature Learning through Autoencoders
 - [ ] Cattle/New Born Recognition
