@@ -36,7 +36,7 @@ def memory_augmented_neural_network(input_var, target_var, \
     def step(X_t, M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1, ix):
 
         x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
-        preactivations = tf.mul(x_t,W_xh) + tf.mul(r_tm1,W_rh) + tf.mul(h_tm1,W_hh) + b_h
+        preactivations = tf.matmul(x_t,W_xh) + tf.matmul(r_tm1,W_rh) + tf.matmul(h_tm1,W_hh) + b_h
         gf_, gi_, go_, u_ = slice_equally(preactivations, controller_size, 4)
         gf = tf.sigmoid(gf_)
         gi = tf.sigmoid(gi_)
@@ -46,14 +46,14 @@ def memory_augmented_neural_network(input_var, target_var, \
         c_t = gf*c_tm1 + gi*u
         h_t = go * tf.tanh(c_t)  #(batch_size, controller_size)
 
-        k_t = tf.tanh(tf.mul(h_t,W_key) + b_key)  #(batch_size, nb_reads, memory_shape[1])
-        a_t = tf.tanh(tf.mul(h_t,W_add) + b_add)
-        sigma_t = tf.sigmoid(tf.mul(h_t,W_sigma) + b_sigma)  #(batch_size, nb_reads, 1)
+        k_t = tf.tanh(tf.matmul(h_t,W_key) + b_key)  #(batch_size, nb_reads, memory_shape[1])
+        a_t = tf.tanh(tf.matmul(h_t,W_add) + b_add)
+        sigma_t = tf.sigmoid(tf.matmul(h_t,W_sigma) + b_sigma)  #(batch_size, nb_reads, 1)
 
         _,temp_indices = tf.nn.top_k(wu_tm1, memory_shape[0])
         wlu_tm1 = tf.slice(temp_indices, [0,0], [batch_size,nb_reads])    #(batch_size, nb_reads)
 
-        ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))
+        ww_t = tf.reshape(tf.matmul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))
         ww_t = tf.scatter_add(ww_t, [tf.range(0, nb_reads*memory_shape[0]), tf.reshape(wlu_tm1,[-1])],1.0 - sigma_t)
         ww_t = tf.reshape((batch_size, nb_reads, memory_shape[0]))
 
@@ -83,8 +83,8 @@ def memory_augmented_neural_network(input_var, target_var, \
 
     ix = tf.variable(0,dtype=tf.int32)
     cond = lambda M_0, c_0, h_0, r_0, wr_0, wu_0, ix: ix < sequence_length_var
-    l_ntm_var = tf.while_loop(cond, body=step,loop_vars=[M_0, c_0, h_0, r_0, wr_0, wu_0, ix])
-    l_ntm_output_var = tf.transpose(tf.concatenate(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])
+    l_ntm_var = tf.while_loop(cond, body=step,loop_vars=[M_0, c_0, h_0, r_0, wr_0, wu_0, ix])   #Set of all above parameters, as list
+    l_ntm_output_var = tf.transpose(tf.concatenate(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])     #h_t & r_t
 
     output_var_preactivation = tf.add(tf.matmul(l_ntm_output_var,W_o), b_o)
     output_var_flatten = tf.nn.softmax(tf.reshape(output_var_preactivation, output_shape_var))
