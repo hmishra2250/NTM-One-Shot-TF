@@ -1,6 +1,7 @@
 # One Shot Learning using Memory-Augmented Neural Networks in Tensorflow
 
 Tensorflow implementation of the paper *One-shot Learning with Memory-Augmented Neural Networks*. 
+
 Current Progress of Implementation:
 - [x]  Utility Functions:
   - [x] Image Handler
