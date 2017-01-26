@@ -41,9 +41,8 @@ def memory_augmented_neural_network(input_var, target_var, \
         def body(V,Z,d1,d2,ix):
             Z = tf.Variable(Z)
             temp = tf.Variable(V[ix], validate_shape=False)
-            temp = tf.scatter_update(temp, d2[ix],val[ix])
-            print Z.dtype
-            Z = tf.scatter_update(Z,[ix],temp)
+            temp[ix].assign([val[ix]])
+            Z[ix].assign([temp])
             with tf.control_dependencies([Z]):
                 return V,Z,d1,d2,ix+1
         [V, Z, dim1, dim2, ix] = tf.while_loop(cond,body,[V,Z,dim1,dim2,ix])
@@ -106,7 +105,7 @@ def memory_augmented_neural_network(input_var, target_var, \
 
     #ix = tf.variable(0,dtype=tf.int32)
     #cond = lambda M_0, c_0, h_0, r_0, wr_0, wu_0, ix: ix < sequence_length_var
-    l_ntm_var = tf.scan(step, elems=tf.transpose(l_input_var, perm=[1,0,2]),initializer=[M_0, c_0, h_0, r_0, wr_0, wu_0])   #Set of all above parameters, as list
+    l_ntm_var = tf.scan(step, elems=tf.transpose(l_input_var, perm=[1,0,2]),initializer=[M_0, c_0, h_0, r_0, wr_0, wu_0], name="Scan_MANN_Last")   #Set of all above parameters, as list
     l_ntm_output_var = tf.transpose(tf.concat_v2(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])     #h_t & r_t, size=(batch_size, sequence_var_length, controller_size+nb_reads*memory_size[1])
 
     l_input_var_W_o = tf.matmul(tf.reshape(l_ntm_output_var, shape=(batch_size*sequence_length_var,-1)), W_o)
