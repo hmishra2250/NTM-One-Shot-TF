@@ -35,22 +35,24 @@ def memory_augmented_neural_network(input_var, target_var, \
 
     def update_tensor(V, dim1, dim2, val):  #Update tensor V, with index[dim1,dim2] by val
         ix = tf.Variable(0)
-        Z = None
+        Z = tf.Variable(tf.zeros_like(V), dtype=tf.float32)
+        print '*********************Start Loop**************************'
         cond = lambda V, Z, d1,d2,ix: ix<d1
         def body(V,Z,d1,d2,ix):
+            Z = tf.Variable(Z)
             temp = tf.Variable(V[ix], validate_shape=False)
-            temp = tf.scatter_update(temp, d2[ix],val)
-            if Z is not None:
-                Z = tf.concat_v2([Z,temp], axis=0)
-            else:
-                Z = temp
+            temp = tf.scatter_update(temp, d2[ix],val[ix])
+            print Z.dtype
+            Z = tf.scatter_update(Z,[ix],temp)
             with tf.control_dependencies([Z]):
                 return V,Z,d1,d2,ix+1
-        tf.while_loop(cond,body,[V,Z,dim1,dim2,ix])
-        return Z
+        [V, Z, dim1, dim2, ix] = tf.while_loop(cond,body,[V,Z,dim1,dim2,ix])
+        with tf.control_dependencies([Z]):
+            print 'Returning'
+            return Z
 
 
-    def step(x_t, M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1):
+    def step((M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1),(x_t)):
 
         #x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
         preactivations = tf.matmul(x_t,W_xh) + tf.matmul(r_tm1,W_rh) + tf.matmul(h_tm1,W_hh) + b_h
@@ -63,18 +65,22 @@ def memory_augmented_neural_network(input_var, target_var, \
         c_t = gf*c_tm1 + gi*u
         h_t = go * tf.tanh(c_t)  #(batch_size, controller_size)
 
-        k_t = tf.tanh(tf.matmul(h_t,W_key) + b_key)  #(batch_size, nb_reads, memory_shape[1])
-        a_t = tf.tanh(tf.matmul(h_t,W_add) + b_add)
-        sigma_t = tf.sigmoid(tf.matmul(h_t,W_sigma) + b_sigma)  #(batch_size, nb_reads, 1)
+        h_t_W_key = tf.matmul(h_t, tf.reshape(W_key, shape=(controller_size,-1)))
+        k_t = tf.tanh(tf.reshape(h_t_W_key, shape=(batch_size, nb_reads, memory_shape[1])) + b_key)  #(batch_size, nb_reads, memory_shape[1])
+        h_t_W_add = tf.matmul(h_t, tf.reshape(W_add, shape=(controller_size, -1)))
+        a_t = tf.tanh(tf.reshape(h_t_W_add, shape=(batch_size, nb_reads, memory_shape[1]))  + b_add)
+        h_t_W_sigma = tf.matmul(h_t, tf.reshape(W_sigma, shape=(controller_size, -1)))
+        sigma_t = tf.sigmoid(tf.reshape(h_t_W_sigma, shape=(batch_size, nb_reads,1)) + b_sigma)  #(batch_size, nb_reads, 1)
 
         _,temp_indices = tf.nn.top_k(wu_tm1, memory_shape[0])
         wlu_tm1 = tf.slice(temp_indices, [0,0], [batch_size,nb_reads])    #(batch_size, nb_reads)
 
-        ww_t = tf.Variable(tf.reshape(tf.matmul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0])), validate_shape=False)    #(batch_size*nb_reads, memory_shape[0])
-        ww_t = update_tensor(ww_t, nb_reads*memory_shape[0], tf.reshape(wlu_tm1,[-1]),1.0 - sigma_t)
+        sigma_t_wr_tm_1 = tf.tile(sigma_t, tf.pack([1, 1, wr_tm1.get_shape().as_list()[2]]))
+        ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))    #(batch_size*nb_reads, memory_shape[0])
+        ww_t = update_tensor(ww_t, nb_reads*memory_shape[0], tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
-        M_t = update_tensor(M_tm1, batch_size, wlu_tm1[:,0], 0.)
+        M_t = update_tensor(M_tm1, batch_size, wlu_tm1[:,0], tf.constant(0., shape=[batch_size]))
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
@@ -86,14 +92,14 @@ def memory_augmented_neural_network(input_var, target_var, \
         r_t = tf.reshape(tf.batch_matmul(wr_t, M_t),[batch_size,-1])
         #ix = tf.add(ix,tf.constant(1,dtype=tf.int32))  #incrementing index
 
-        return (M_t, c_t, h_t, r_t, wr_t, wu_t)
+        return [M_t, c_t, h_t, r_t, wr_t, wu_t]
 
     #Model Part:
-    sequence_length_var = target_var.shape[1]   #length of the input
-    output_shape_var = (batch_size * sequence_length_var, nb_class)     #(batch_size*sequence_length_vat,nb_class)
+    sequence_length_var = target_var.get_shape().as_list()[1]   #length of the input
+    output_shape_var = (tf.mul(batch_size, sequence_length_var), nb_class)     #(batch_size*sequence_length_vat,nb_class)
 
     # Input concat with time offset
-    one_hot_target_flattened = tf.one_hot(output_shape_var, depth=nb_class)
+    one_hot_target_flattened = tf.one_hot(tf.reshape(target_var,[-1]), depth=nb_class)
     one_hot_target = tf.reshape(one_hot_target_flattened, (batch_size, sequence_length_var, nb_class))    #(batch_size, sequence_var_length, nb_class)
     offset_target_var = tf.concat_v2([tf.zeros_like(tf.expand_dims(one_hot_target[:,0],1)),one_hot_target[:,:-1]],axis=1)   #(batch_size, sequence_var_length, nb_class)
     l_input_var = tf.concat_v2([input_var,offset_target_var],axis=2)    #(batch_size, sequence_var_length, input_size+nb_class)
@@ -103,9 +109,10 @@ def memory_augmented_neural_network(input_var, target_var, \
     l_ntm_var = tf.scan(step, elems=tf.transpose(l_input_var, perm=[1,0,2]),initializer=[M_0, c_0, h_0, r_0, wr_0, wu_0])   #Set of all above parameters, as list
     l_ntm_output_var = tf.transpose(tf.concat_v2(l_ntm_var[2:4], axis=2), perm=[1, 0, 2])     #h_t & r_t, size=(batch_size, sequence_var_length, controller_size+nb_reads*memory_size[1])
 
-    output_var_preactivation = tf.add(tf.matmul(l_ntm_output_var,W_o), b_o)
+    l_input_var_W_o = tf.matmul(tf.reshape(l_ntm_output_var, shape=(batch_size*sequence_length_var,-1)), W_o)
+    output_var_preactivation = tf.add(tf.reshape(l_input_var_W_o, (batch_size, sequence_length_var,nb_class)), b_o)
     output_var_flatten = tf.nn.softmax(tf.reshape(output_var_preactivation, output_shape_var))
-    output_var = tf.reshape(output_var_flatten, output_var_preactivation.shape)
+    output_var = tf.reshape(output_var_flatten, output_var_preactivation.get_shape().as_list())
 
     #Parameters
     params = [W_key, b_key, W_add, b_add, W_sigma, b_sigma, W_xh, W_rh, W_hh, b_h, W_o, b_o]
