@@ -19,8 +19,10 @@ def omniglot():
 
     print 'Compiling the Model'
 
-    target_ph = tf.one_hot(tf.reshape(target_ph, shape=[-1, 1]), depth=generator.nb_samples)
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(output_var_flatten, target_ph))
+    output_var = tf.cast(output_var, tf.int32)
+    target_ph_flatten = tf.one_hot(tf.reshape(target_ph, shape=[-1, 1]), depth=generator.nb_samples)
+    #print '*******************------------>',target_ph.get_shape().as_list(),tf.argmax(output_var, axis=2).get_shape().as_list(), output_var.dtype
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(output_var_flatten, target_ph_flatten))
     train_step = tf.train.AdamOptimizer(1e-3).minimize(cost)
     accuracies = accuracy_instance(tf.argmax(output_var, axis=2), target_ph, batch_size=generator.batch_size)
 
