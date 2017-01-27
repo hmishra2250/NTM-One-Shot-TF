@@ -13,24 +13,23 @@ def accuracy_instance(predictions, targets, n=[1, 2, 3, 4, 5, 10], nb_classes=5,
 
     def update_tensor(V, dim1, dim2, val):  # Update tensor V, with index(:,dim2[:]) by val[:]
         val = tf.cast(val, V.dtype)
-        print val.dtype
+        Z = tf.Variable(tf.zeros_like(V), dtype=tf.float32 ,name='Z_all')
         ix = tf.Variable(0, dtype=tf.int32)
-        Z = tf.Variable(tf.zeros_like(V), dtype=tf.float32, name="Z_all")
-        cond = lambda V, d1, d2, ix: ix < d1
+        cond = lambda V, Z, d1, d2, ix: ix < d1
 
-        def body(V, d1, d2, ix):
+        def body(V, Z, d1, d2, ix):
+            Z = tf.Variable(Z, name="Z_temp")
             ix_int = tf.cast(ix, tf.int32)
             d2_int = tf.cast(d2, tf.int32)
-            Z = tf.get_variable("Z_all")
             temp = tf.Variable(V[ix_int], validate_shape=False)
             temp = tf.scatter_update(temp, d2_int[ix_int], val[ix_int])
             Z[ix].assign(temp)
-            tf.get_variable_scope().reuse_variables()
-            return V, d1, d2, ix + 1
+            #tf.get_variable_scope().reuse_variables()
+            return V, Z, d1, d2, ix + 1
 
-        temp = tf.while_loop(cond, body, [V, dim1, dim2, ix], name="While_Metric_Update")
-        with tf.control_dependencies([Z]):
-            return Z
+        V, Z, dim1, dim2, ix = tf.while_loop(cond, body, [V, Z, dim1, dim2, ix], name="While_Metric_Update")
+        #with tf.control_dependencies([Z]):
+        return Z
 
     def step_((acc, idx), (p, t)):
         p = tf.cast(p, tf.int32)
