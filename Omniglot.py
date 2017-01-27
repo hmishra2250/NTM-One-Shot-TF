@@ -26,6 +26,8 @@ def omniglot():
     train_step = tf.train.AdamOptimizer(1e-3).minimize(cost)
     accuracies = accuracy_instance(tf.argmax(output_var, axis=2), target_ph, batch_size=generator.batch_size)
 
+    print 'Done'
+
     print 'Training the model'
 
     t0 = time.time()
