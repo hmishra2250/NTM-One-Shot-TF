@@ -19,39 +19,101 @@ def memory_augmented_neural_network(input_var, target_var, \
     wr_0 = shared_one_hot((batch_size, nb_reads, memory_shape[0]), name='wr')
     wu_0 = shared_one_hot((batch_size, memory_shape[0]), name='wu')
 
-    W_key, b_key = weight_and_bias_init((controller_size, memory_shape[1]), name='key', n=nb_reads)
-    W_add, b_add = weight_and_bias_init((controller_size, memory_shape[1]), name='add', n=nb_reads)
-    W_sigma, b_sigma = weight_and_bias_init((controller_size, 1), name='sigma', n=nb_reads)
+    with tf.variable_scope("Weights"):
+        print "Init : ",tf.VariableScope.name
+        high = tf.constant(1e-3)
+        W_key = tf.get_variable('W_key', shape=(nb_reads, controller_size, memory_shape[1]),initializer=tf.random_uniform_initializer(-1*high, high))
+        b_key = tf.get_variable('b_key', shape=(nb_reads, memory_shape[1]),initializer=tf.constant_initializer(0))
+        W_add = tf.get_variable('W_add', shape=(nb_reads, controller_size, memory_shape[1]),initializer=tf.random_uniform_initializer(-1*high, high))
+        b_add = tf.get_variable('b_add', shape=(nb_reads, memory_shape[1]),initializer=tf.constant_initializer(0))
+        W_sigma = tf.get_variable('W_sigma', shape=(nb_reads, controller_size, 1),initializer=tf.random_uniform_initializer(-1*high, high))
+        b_sigma = tf.get_variable('b_sigma', shape=(nb_reads, 1),initializer=tf.constant_initializer(0))
+        W_xh = tf.get_variable('W_xh', shape=(input_size + nb_class, 4*controller_size),initializer=tf.random_uniform_initializer(-1*high, high))
+        b_h = tf.get_variable('b_xh', shape=(4*controller_size),initializer=tf.constant_initializer(0))
+        W_o = tf.get_variable('W_o', shape=(controller_size + nb_reads * memory_shape[1], nb_class),initializer=tf.random_uniform_initializer(-1*high, high))
+        b_o = tf.get_variable('b_o', shape=(nb_class),initializer=tf.constant_initializer(0))
+        W_rh = tf.get_variable('W_rh', shape=(nb_reads * memory_shape[1], 4 * controller_size),initializer=tf.random_uniform_initializer(-1*high, high))
+        W_hh = tf.get_variable('W_hh', shape=(controller_size, 4*controller_size),initializer=tf.random_uniform_initializer(-1*high, high))
+        gamma = tf.get_variable('gamma', shape=[1], initializer=tf.constant_initializer(0.95))
 
-    W_xh, b_h = weight_and_bias_init((input_size + nb_class, 4 * controller_size),name='xh')
-    W_rh = shared_glorot_uniform((nb_reads * memory_shape[1], 4 * controller_size), name='W_rh')
-    W_hh = shared_glorot_uniform((controller_size, 4*controller_size),name='W_hh')
-    W_o, b_o = weight_and_bias_init((controller_size + nb_reads * memory_shape[1], nb_class),name='o')
-    gamma = 0.95
+    """W_key, b_key = weight_and_bias_init((controller_size, memory_shape[1]), name='key', n=nb_reads)
+        W_add, b_add = weight_and_bias_init((controller_size, memory_shape[1]), name='add', n=nb_reads)
+        W_sigma, b_sigma = weight_and_bias_init((controller_size, 1), name='sigma', n=nb_reads)
+
+        W_xh, b_h = weight_and_bias_init((input_size + nb_class, 4 * controller_size),name='xh')
+        W_rh = shared_glorot_uniform((nb_reads * memory_shape[1], 4 * controller_size), name='W_rh')
+        W_hh = shared_glorot_uniform((controller_size, 4*controller_size),name='W_hh')
+        W_o, b_o = weight_and_bias_init((controller_size + nb_reads * memory_shape[1], nb_class),name='o')
+        gamma = tf.constant(0.95, name='gamma')"""
 
     def slice_equally(x, size, nb_slice):
         # type: (object, object, object) -> object
         return [x[:,n*size:(n+1)*size] for n in range(nb_slice)]
 
-    def update_tensor(V, dim1, dim2, val):  #Update tensor V, with index[dim1,dim2] by val
-        ix = tf.Variable(0)
-        Z = tf.Variable(tf.zeros_like(V), dtype=tf.float32)
-        print '*********************Start Loop**************************'
-        cond = lambda V, Z, d1,d2,ix: ix<d1
-        def body(V,Z,d1,d2,ix):
-            Z = tf.Variable(Z)
-            temp = tf.Variable(V[ix], validate_shape=False)
-            temp[ix].assign([val[ix]])
-            Z[ix].assign([temp])
-            with tf.control_dependencies([Z]):
-                return V,Z,d1,d2,ix+1
-        [V, Z, dim1, dim2, ix] = tf.while_loop(cond,body,[V,Z,dim1,dim2,ix])
+    def update_tensor(V, dim2, val):  # Update tensor V, with index(:,dim2[:]) by val[:]
+        val = tf.cast(val, V.dtype)
+        print V.get_shape().as_list(), dim2.get_shape().as_list(), val.get_shape().as_list()
+        with tf.variable_scope('temp', reuse=None):
+            temp = tf.get_variable(name="Black2", shape=V.get_shape().as_list()[1],
+                                   initializer=tf.constant_initializer(0, dtype=V.dtype))
+
+        def body((v, d2, chg),_):
+            d2_int = tf.cast(d2, tf.int32)
+            with tf.variable_scope('temp', reuse=True):
+                temp = tf.get_variable(name="Black2", shape=v.get_shape().as_list(),
+                                       initializer=tf.constant_initializer(0, dtype=V.dtype))
+            temp[:].assign(v)
+            temp[d2_int].assign(chg)
+            return temp, d2, chg
+        Z, _, _ = tf.scan(body, elems=(V, dim2, val), name="Scan_Update")
         with tf.control_dependencies([Z]):
-            print 'Returning'
             return Z
+
+    def update_tensor2(V, dim2, val):  # Update tensor V, with index(:,dim2[:]) by val[:]
+        val = tf.cast(val, V.dtype)
+        print V.get_shape().as_list(), dim2.get_shape().as_list(), val.get_shape().as_list()
+        print 'Metric Third brrrrrrrrrrr=======================**********>>>>'
+        with tf.variable_scope('temp2', reuse=None):
+            temp = tf.get_variable(name="Black1", shape=V.get_shape().as_list()[1:],
+                                   initializer=tf.constant_initializer(0, dtype=V.dtype))
+
+        def body((v, d2, chg),_):
+            with tf.variable_scope('temp2', reuse=True):
+                temp = tf.get_variable(name="Black1", shape=v.get_shape().as_list(),
+                                       initializer=tf.constant_initializer(0, dtype=v.dtype))
+            d2_int = tf.cast(d2, tf.int32, name="d2_new")
+
+            temp[:].assign(v)
+            temp[d2_int].assign(chg)
+            return temp, d2, chg
+        Z, _, _ = tf.scan(body, elems=(V, dim2, val), name="Metric_Update_Scan")
+        return Z
 
 
     def step((M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1),(x_t)):
+
+        with tf.variable_scope("Weights", reuse=True):
+            high = tf.constant(1e-3)
+            W_key = tf.get_variable('W_key', shape=(nb_reads, controller_size, memory_shape[1]),
+                                    initializer=tf.random_uniform_initializer(-1 * high, high))
+            b_key = tf.get_variable('b_key', shape=(nb_reads, memory_shape[1]), initializer=tf.constant_initializer(0))
+            W_add = tf.get_variable('W_add', shape=(nb_reads, controller_size, memory_shape[1]),
+                                    initializer=tf.random_uniform_initializer(-1 * high, high))
+            b_add = tf.get_variable('b_add', shape=(nb_reads, memory_shape[1]), initializer=tf.constant_initializer(0))
+            W_sigma = tf.get_variable('W_sigma', shape=(nb_reads, controller_size, 1),
+                                      initializer=tf.random_uniform_initializer(-1 * high, high))
+            b_sigma = tf.get_variable('b_sigma', shape=(nb_reads, 1), initializer=tf.constant_initializer(0))
+            W_xh = tf.get_variable('W_xh', shape=(input_size + nb_class, 4 * controller_size),
+                                   initializer=tf.random_uniform_initializer(-1 * high, high))
+            b_h = tf.get_variable('b_xh', shape=(4 * controller_size), initializer=tf.constant_initializer(0))
+            W_o = tf.get_variable('W_o', shape=(controller_size + nb_reads * memory_shape[1], nb_class),
+                                  initializer=tf.random_uniform_initializer(-1 * high, high))
+            b_o = tf.get_variable('b_o', shape=(nb_class), initializer=tf.constant_initializer(0))
+            W_rh = tf.get_variable('W_rh', shape=(nb_reads * memory_shape[1], 4 * controller_size),
+                                   initializer=tf.random_uniform_initializer(-1 * high, high))
+            W_hh = tf.get_variable('W_hh', shape=(controller_size, 4 * controller_size),
+                                   initializer=tf.random_uniform_initializer(-1 * high, high))
+            gamma = tf.get_variable('gamma', shape=[1], initializer=tf.constant_initializer(0.95))
 
         #x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
         preactivations = tf.matmul(x_t,W_xh) + tf.matmul(r_tm1,W_rh) + tf.matmul(h_tm1,W_hh) + b_h
@@ -76,10 +138,10 @@ def memory_augmented_neural_network(input_var, target_var, \
 
         sigma_t_wr_tm_1 = tf.tile(sigma_t, tf.pack([1, 1, wr_tm1.get_shape().as_list()[2]]))
         ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))    #(batch_size*nb_reads, memory_shape[0])
-        ww_t = update_tensor(ww_t, nb_reads*memory_shape[0], tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))
+        ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
-        M_t = update_tensor(M_tm1, batch_size, wlu_tm1[:,0], tf.constant(0., shape=[batch_size]))
+        M_t = update_tensor2(M_tm1, wlu_tm1[:,0], tf.constant(0., shape=[batch_size]))
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
@@ -89,7 +151,6 @@ def memory_augmented_neural_network(input_var, target_var, \
         wu_t = gamma * wu_tm1 + tf.reduce_sum(wr_t, axis=1) + tf.reduce_sum(ww_t, axis=1) #(batch_size, memory_size[0])
 
         r_t = tf.reshape(tf.batch_matmul(wr_t, M_t),[batch_size,-1])
-        #ix = tf.add(ix,tf.constant(1,dtype=tf.int32))  #incrementing index
 
         return [M_t, c_t, h_t, r_t, wr_t, wu_t]
 
