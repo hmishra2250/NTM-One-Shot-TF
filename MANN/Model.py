@@ -4,6 +4,7 @@ import numpy as np
 from .Utils.init import weight_and_bias_init, shared_glorot_uniform, shared_one_hot
 from .Utils.similarities import cosine_similarity
 from .Utils.tf_utils import shared_float32
+from .Utils.tf_utils import update_tensor
 
 
 def memory_augmented_neural_network(input_var, target_var, \
@@ -49,45 +50,6 @@ def memory_augmented_neural_network(input_var, target_var, \
     def slice_equally(x, size, nb_slice):
         # type: (object, object, object) -> object
         return [x[:,n*size:(n+1)*size] for n in range(nb_slice)]
-
-    def update_tensor(V, dim2, val):  # Update tensor V, with index(:,dim2[:]) by val[:]
-        val = tf.cast(val, V.dtype)
-        print V.get_shape().as_list(), dim2.get_shape().as_list(), val.get_shape().as_list()
-        with tf.variable_scope('temp', reuse=None):
-            temp = tf.get_variable(name="Black2", shape=V.get_shape().as_list()[1],
-                                   initializer=tf.constant_initializer(0, dtype=V.dtype))
-
-        def body((v, d2, chg),_):
-            d2_int = tf.cast(d2, tf.int32)
-            with tf.variable_scope('temp', reuse=True):
-                temp = tf.get_variable(name="Black2", shape=v.get_shape().as_list(),
-                                       initializer=tf.constant_initializer(0, dtype=V.dtype))
-            temp[:].assign(v)
-            temp[d2_int].assign(chg)
-            return temp, d2, chg
-        Z, _, _ = tf.scan(body, elems=(V, dim2, val), name="Scan_Update")
-        with tf.control_dependencies([Z]):
-            return Z
-
-    def update_tensor2(V, dim2, val):  # Update tensor V, with index(:,dim2[:]) by val[:]
-        val = tf.cast(val, V.dtype)
-        print V.get_shape().as_list(), dim2.get_shape().as_list(), val.get_shape().as_list()
-        print 'Metric Third brrrrrrrrrrr=======================**********>>>>'
-        with tf.variable_scope('temp2', reuse=None):
-            temp = tf.get_variable(name="Black1", shape=V.get_shape().as_list()[1:],
-                                   initializer=tf.constant_initializer(0, dtype=V.dtype))
-
-        def body((v, d2, chg),_):
-            with tf.variable_scope('temp2', reuse=True):
-                temp = tf.get_variable(name="Black1", shape=v.get_shape().as_list(),
-                                       initializer=tf.constant_initializer(0, dtype=v.dtype))
-            d2_int = tf.cast(d2, tf.int32, name="d2_new")
-
-            temp[:].assign(v)
-            temp[d2_int].assign(chg)
-            return temp, d2, chg
-        Z, _, _ = tf.scan(body, elems=(V, dim2, val), name="Metric_Update_Scan")
-        return Z
 
 
     def step((M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1),(x_t)):
@@ -138,10 +100,12 @@ def memory_augmented_neural_network(input_var, target_var, \
 
         sigma_t_wr_tm_1 = tf.tile(sigma_t, tf.pack([1, 1, wr_tm1.get_shape().as_list()[2]]))
         ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))    #(batch_size*nb_reads, memory_shape[0])
-        ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))
+        with tf.variable_scope("ww_t"):
+            ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
-        M_t = update_tensor2(M_tm1, wlu_tm1[:,0], tf.constant(0., shape=[batch_size]))
+        with tf.variable_scope("M_t"):
+            M_t = update_tensor(M_tm1, wlu_tm1[:,0], tf.constant(0., shape=[batch_size]))
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
