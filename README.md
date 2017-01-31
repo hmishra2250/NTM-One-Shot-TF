@@ -9,7 +9,7 @@ Current Progress of Implementation:
   - [x] Similarities (Cosine Similarity)
 - [x] LSTM Controller and Memory Unit
 - [x] Batch Generators
-- [ ] Omniglot Tester Code
+- [x] Omniglot Tester Code
 - [ ] Unsupervised Feature Learning through Autoencoders
 - [ ] Cattle/New Born Recognition
 
