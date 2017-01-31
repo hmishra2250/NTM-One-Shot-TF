@@ -25,7 +25,8 @@ def accuracy_instance(predictions, targets, n=[1, 2, 3, 4, 5, 10], nb_classes=5,
             accuracy.assign(update_tensor(accuracy, tf.gather_nd(indices,tf.pack([tf.range(0,p.get_shape().as_list()[0]), t], axis=1)), tf.equal(p, t)))
         with tf.variable_scope("Index_Upd"):
             indices.assign(update_tensor(indices, t, tf.constant(1, shape=[p.get_shape().as_list()[0]])))
-        return [accuracy, ix+1]
+        with tf.control_dependencies([accuracy,indices]):
+            return [accuracy, ix+1]
 
     ix = tf.constant(0, dtype=tf.int32)
     _, _ = tf.scan(step_, elems=(tf.transpose(predictions, perm=[1, 0]), tf.transpose(targets, perm=[1, 0])),initializer=[accuracy, ix], name="Scan_Metric_Last")
