@@ -5,6 +5,7 @@ import time
 from MANN.Model import memory_augmented_neural_network
 from MANN.Utils.Generator import OmniglotGenerator
 from MANN.Utils.Metrics import accuracy_instance
+from MANN.Utils.tf_utils import update_tensor
 
 def omniglot():
 
@@ -21,20 +22,24 @@ def omniglot():
 
     output_var = tf.cast(output_var, tf.int32)
     target_ph_flatten = tf.one_hot(tf.reshape(target_ph, shape=[-1, 1]), depth=generator.nb_samples)
-    #print '*******************------------>',target_ph.get_shape().as_list(),tf.argmax(output_var, axis=2).get_shape().as_list(), output_var.dtype
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(output_var_flatten, target_ph_flatten))
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(output_var_flatten, target_ph_flatten), name="cost")
     train_step = tf.train.AdamOptimizer(1e-3).minimize(cost)
     accuracies = accuracy_instance(tf.argmax(output_var, axis=2), target_ph, batch_size=generator.batch_size)
 
     print 'Done'
 
+    sess.run(tf.global_variables_initializer())
+
     print 'Training the model'
+
+    writer = tf.train.SummaryWriter('/tmp/tensorflow', graph=tf.get_default_graph())
+    tf.scalar_summary('cost', cost)
+
 
     t0 = time.time()
     all_scores, scores, accs = [],[],np.zeros(generator.nb_samples_per_class)
 
 
-    sess.run(tf.global_variables_initializer())
 
     try:
         for i, (batch_input, batch_output) in generator:
@@ -42,6 +47,7 @@ def omniglot():
                 input_ph: batch_input,
                 target_ph: batch_output
             }
+            print batch_input.shape, batch_output.shape, batch_output[0]
             train_step.run(feed_dict)
             score = cost.eval(feed_dict)
             acc = accuracies.eval(feed_dict)
@@ -49,10 +55,10 @@ def omniglot():
             scores.append(score)
             accuracies += acc
 
-            if i>0 and not (i%20):
+            if i>0 and not (i%2):
                 print('Episode %05d: %.6f' % (i, np.mean(score)))
                 print(accs / 100.)
-                scores, accs = [], np.zeros(generator.nb_samples_per_class)
+                #scores, accs = [], np.zeros(generator.nb_samples_per_class)
 
 
     except KeyboardInterrupt:
