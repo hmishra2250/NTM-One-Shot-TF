@@ -77,8 +77,9 @@ def memory_augmented_neural_network(input_var, target_var, \
                                    initializer=tf.random_uniform_initializer(-1 * high, high))
             gamma = tf.get_variable('gamma', shape=[1], initializer=tf.constant_initializer(0.95))
 
+
         #pt = M_tm1[0:2]
-        #pt = tf.Print(pt, [pt], message='Prinitng Memory: ')
+        #pt = tf.Print(pt, [pt], message='Prinitng W_key: ')
         #x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
         #with tf.control_dependencies([pt]):
         preactivations = tf.matmul(x_t,W_xh) + tf.matmul(r_tm1,W_rh) + tf.matmul(h_tm1,W_hh) + b_h
@@ -108,11 +109,6 @@ def memory_augmented_neural_network(input_var, target_var, \
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
         with tf.variable_scope("M_t"):
-            """lu_update = tf.cast(tf.pack([tf.range(0, batch_size), wlu_tm1[:,0], tf.range(0,M_tm1.get_shape().as_list()[-1])], axis=1), dtype=tf.int64)
-            zero_upd = tf.constant(1, shape=[batch_size*M_tm1.get_shape().as_list()[-1]])
-            print 'Shape Test: ',lu_update.get_shape().as_list(), zero_upd.get_shape().as_list()
-            delta = tf.SparseTensor(indices= lu_update, values=zero_upd, shape=tf.cast(M_tm1.get_shape(), tf.int64))
-            M_t = tf.mul(M_tm1, tf.constant(1.0, shape=M_tm1.get_shape()) - tf.sparse_tensor_to_dense(delta))"""
             print 'wlu_tm1 : ', wlu_tm1.get_shape().as_list()
             M_t = update_tensor(M_tm1, wlu_tm1[:,0], tf.constant(0., shape=[batch_size, memory_shape[1]]))      #Update tensor done using sparse to dense
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
