@@ -77,7 +77,10 @@ def memory_augmented_neural_network(input_var, target_var, \
                                    initializer=tf.random_uniform_initializer(-1 * high, high))
             gamma = tf.get_variable('gamma', shape=[1], initializer=tf.constant_initializer(0.95))
 
+        #pt = M_tm1[0:2]
+        #pt = tf.Print(pt, [pt], message='Prinitng Memory: ')
         #x_t = tf.transpose(X_t, perm=[1, 0, 2])[ix]
+        #with tf.control_dependencies([pt]):
         preactivations = tf.matmul(x_t,W_xh) + tf.matmul(r_tm1,W_rh) + tf.matmul(h_tm1,W_hh) + b_h
         gf_, gi_, go_, u_ = slice_equally(preactivations, controller_size, 4)
         gf = tf.sigmoid(gf_)
@@ -101,11 +104,17 @@ def memory_augmented_neural_network(input_var, target_var, \
         sigma_t_wr_tm_1 = tf.tile(sigma_t, tf.pack([1, 1, wr_tm1.get_shape().as_list()[2]]))
         ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))    #(batch_size*nb_reads, memory_shape[0])
         with tf.variable_scope("ww_t"):
-            ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))
+            ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))   #Update tensor done using index slicing
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
         with tf.variable_scope("M_t"):
-            M_t = update_tensor(M_tm1, wlu_tm1[:,0], tf.constant(0., shape=[batch_size]))
+            """lu_update = tf.cast(tf.pack([tf.range(0, batch_size), wlu_tm1[:,0], tf.range(0,M_tm1.get_shape().as_list()[-1])], axis=1), dtype=tf.int64)
+            zero_upd = tf.constant(1, shape=[batch_size*M_tm1.get_shape().as_list()[-1]])
+            print 'Shape Test: ',lu_update.get_shape().as_list(), zero_upd.get_shape().as_list()
+            delta = tf.SparseTensor(indices= lu_update, values=zero_upd, shape=tf.cast(M_tm1.get_shape(), tf.int64))
+            M_t = tf.mul(M_tm1, tf.constant(1.0, shape=M_tm1.get_shape()) - tf.sparse_tensor_to_dense(delta))"""
+            print 'wlu_tm1 : ', wlu_tm1.get_shape().as_list()
+            M_t = update_tensor(M_tm1, wlu_tm1[:,0], tf.constant(0., shape=[batch_size, memory_shape[1]]))      #Update tensor done using sparse to dense
         M_t = tf.add(M_t, tf.batch_matmul(tf.transpose(ww_t, perm=[0,2,1]   ), a_t))   #(batch_size, memory_size[0], memory_size[1])
         K_t = cosine_similarity(k_t, M_t)
 
@@ -122,7 +131,7 @@ def memory_augmented_neural_network(input_var, target_var, \
     sequence_length_var = target_var.get_shape().as_list()[1]   #length of the input
     output_shape_var = (tf.mul(batch_size, sequence_length_var), nb_class)     #(batch_size*sequence_length_vat,nb_class)
 
-    # Input concat with time offset
+            # Input concat with time offset
     one_hot_target_flattened = tf.one_hot(tf.reshape(target_var,[-1]), depth=nb_class)
     one_hot_target = tf.reshape(one_hot_target_flattened, (batch_size, sequence_length_var, nb_class))    #(batch_size, sequence_var_length, nb_class)
     offset_target_var = tf.concat_v2([tf.zeros_like(tf.expand_dims(one_hot_target[:,0],1)),one_hot_target[:,:-1]],axis=1)   #(batch_size, sequence_var_length, nb_class)
