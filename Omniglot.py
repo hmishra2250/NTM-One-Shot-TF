@@ -20,7 +20,7 @@ def omniglot():
 
     print 'Compiling the Model'
 
-    output_var = tf.cast(output_var, tf.int32)
+    #output_var = tf.cast(output_var, tf.int32)
     target_ph_flatten = tf.one_hot(tf.reshape(target_ph, shape=[-1, 1]), depth=generator.nb_samples)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(output_var_flatten, target_ph_flatten), name="cost")
     train_step = tf.train.AdamOptimizer(1e-3).minimize(cost)
@@ -32,8 +32,8 @@ def omniglot():
 
     print 'Training the model'
 
-    writer = tf.train.SummaryWriter('/tmp/tensorflow', graph=tf.get_default_graph())
-    tf.scalar_summary('cost', cost)
+    writer = tf.summary.FileWriter('/tmp/tensorflow', graph=tf.get_default_graph())
+    tf.summary.scalar('cost', cost)
 
 
     t0 = time.time()
@@ -47,18 +47,18 @@ def omniglot():
                 input_ph: batch_input,
                 target_ph: batch_output
             }
-            print batch_input.shape, batch_output.shape, batch_output[0]
+            print batch_input.shape, batch_output.shape
             train_step.run(feed_dict)
             score = cost.eval(feed_dict)
             acc = accuracies.eval(feed_dict)
             all_scores.append(score)
             scores.append(score)
-            accuracies += acc
+            accs += acc
 
             if i>0 and not (i%2):
+                print(accs / 100.0)
                 print('Episode %05d: %.6f' % (i, np.mean(score)))
-                print(accs / 100.)
-                #scores, accs = [], np.zeros(generator.nb_samples_per_class)
+                scores, accs = [], np.zeros(generator.nb_samples_per_class)
 
 
     except KeyboardInterrupt:
