@@ -19,33 +19,36 @@ def memory_augmented_neural_network(input_var, target_var, \
     r_0 = shared_float32(np.zeros((batch_size, nb_reads * memory_shape[1])), name='read_vector')
     wr_0 = shared_one_hot((batch_size, nb_reads, memory_shape[0]), name='wr')
     wu_0 = shared_one_hot((batch_size, memory_shape[0]), name='wu')
+    
+    def shape_high(shape):
+    	shape = np.array(shape)
+    	if isinstance(shape, int):
+            high = np.sqrt(6. / shape)
+    	else:
+            high = np.sqrt(6. / (np.sum(shape[:2]) * np.prod(shape[2:])))
+        return (shape,high)
 
     with tf.variable_scope("Weights"):
-        print "Init : ",tf.VariableScope.name
-        high = tf.constant(1e-3)
-        W_key = tf.get_variable('W_key', shape=(nb_reads, controller_size, memory_shape[1]),initializer=tf.random_uniform_initializer(-1*high, high))
+    	shape, high = shape_high((nb_reads, controller_size, memory_shape[1]))
+        W_key = tf.get_variable('W_key', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
         b_key = tf.get_variable('b_key', shape=(nb_reads, memory_shape[1]),initializer=tf.constant_initializer(0))
-        W_add = tf.get_variable('W_add', shape=(nb_reads, controller_size, memory_shape[1]),initializer=tf.random_uniform_initializer(-1*high, high))
+        shape, high = shape_high((nb_reads, controller_size, memory_shape[1]))
+        W_add = tf.get_variable('W_add', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
         b_add = tf.get_variable('b_add', shape=(nb_reads, memory_shape[1]),initializer=tf.constant_initializer(0))
-        W_sigma = tf.get_variable('W_sigma', shape=(nb_reads, controller_size, 1),initializer=tf.random_uniform_initializer(-1*high, high))
+        shape, high = shape_high((nb_reads, controller_size, 1))
+        W_sigma = tf.get_variable('W_sigma', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
         b_sigma = tf.get_variable('b_sigma', shape=(nb_reads, 1),initializer=tf.constant_initializer(0))
-        W_xh = tf.get_variable('W_xh', shape=(input_size + nb_class, 4*controller_size),initializer=tf.random_uniform_initializer(-1*high, high))
+        shape, high = shape_high((input_size + nb_class, 4*controller_size))
+        W_xh = tf.get_variable('W_xh', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
         b_h = tf.get_variable('b_xh', shape=(4*controller_size),initializer=tf.constant_initializer(0))
-        W_o = tf.get_variable('W_o', shape=(controller_size + nb_reads * memory_shape[1], nb_class),initializer=tf.random_uniform_initializer(-1*high, high))
+        shape, high = shape_high((controller_size + nb_reads * memory_shape[1], nb_class))
+        W_o = tf.get_variable('W_o', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
         b_o = tf.get_variable('b_o', shape=(nb_class),initializer=tf.constant_initializer(0))
-        W_rh = tf.get_variable('W_rh', shape=(nb_reads * memory_shape[1], 4 * controller_size),initializer=tf.random_uniform_initializer(-1*high, high))
-        W_hh = tf.get_variable('W_hh', shape=(controller_size, 4*controller_size),initializer=tf.random_uniform_initializer(-1*high, high))
+        shape, high = shape_high((nb_reads * memory_shape[1], 4 * controller_size))
+        W_rh = tf.get_variable('W_rh', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
+        shape, high = shape_high((controller_size, 4*controller_size))
+        W_hh = tf.get_variable('W_hh', shape=shape,initializer=tf.random_uniform_initializer(-1*high, high))
         gamma = tf.get_variable('gamma', shape=[1], initializer=tf.constant_initializer(0.95))
-
-    """W_key, b_key = weight_and_bias_init((controller_size, memory_shape[1]), name='key', n=nb_reads)
-        W_add, b_add = weight_and_bias_init((controller_size, memory_shape[1]), name='add', n=nb_reads)
-        W_sigma, b_sigma = weight_and_bias_init((controller_size, 1), name='sigma', n=nb_reads)
-
-        W_xh, b_h = weight_and_bias_init((input_size + nb_class, 4 * controller_size),name='xh')
-        W_rh = shared_glorot_uniform((nb_reads * memory_shape[1], 4 * controller_size), name='W_rh')
-        W_hh = shared_glorot_uniform((controller_size, 4*controller_size),name='W_hh')
-        W_o, b_o = weight_and_bias_init((controller_size + nb_reads * memory_shape[1], nb_class),name='o')
-        gamma = tf.constant(0.95, name='gamma')"""
 
     def slice_equally(x, size, nb_slice):
         # type: (object, object, object) -> object
@@ -55,26 +58,18 @@ def memory_augmented_neural_network(input_var, target_var, \
     def step((M_tm1, c_tm1, h_tm1, r_tm1, wr_tm1, wu_tm1),(x_t)):
 
         with tf.variable_scope("Weights", reuse=True):
-            high = tf.constant(1e-3)
-            W_key = tf.get_variable('W_key', shape=(nb_reads, controller_size, memory_shape[1]),
-                                    initializer=tf.random_uniform_initializer(-1 * high, high))
-            b_key = tf.get_variable('b_key', shape=(nb_reads, memory_shape[1]), initializer=tf.constant_initializer(0))
-            W_add = tf.get_variable('W_add', shape=(nb_reads, controller_size, memory_shape[1]),
-                                    initializer=tf.random_uniform_initializer(-1 * high, high))
-            b_add = tf.get_variable('b_add', shape=(nb_reads, memory_shape[1]), initializer=tf.constant_initializer(0))
-            W_sigma = tf.get_variable('W_sigma', shape=(nb_reads, controller_size, 1),
-                                      initializer=tf.random_uniform_initializer(-1 * high, high))
-            b_sigma = tf.get_variable('b_sigma', shape=(nb_reads, 1), initializer=tf.constant_initializer(0))
-            W_xh = tf.get_variable('W_xh', shape=(input_size + nb_class, 4 * controller_size),
-                                   initializer=tf.random_uniform_initializer(-1 * high, high))
-            b_h = tf.get_variable('b_xh', shape=(4 * controller_size), initializer=tf.constant_initializer(0))
-            W_o = tf.get_variable('W_o', shape=(controller_size + nb_reads * memory_shape[1], nb_class),
-                                  initializer=tf.random_uniform_initializer(-1 * high, high))
-            b_o = tf.get_variable('b_o', shape=(nb_class), initializer=tf.constant_initializer(0))
-            W_rh = tf.get_variable('W_rh', shape=(nb_reads * memory_shape[1], 4 * controller_size),
-                                   initializer=tf.random_uniform_initializer(-1 * high, high))
-            W_hh = tf.get_variable('W_hh', shape=(controller_size, 4 * controller_size),
-                                   initializer=tf.random_uniform_initializer(-1 * high, high))
+            W_key = tf.get_variable('W_key', shape=(nb_reads, controller_size, memory_shape[1]))
+            b_key = tf.get_variable('b_key', shape=(nb_reads, memory_shape[1]))
+            W_add = tf.get_variable('W_add', shape=(nb_reads, controller_size, memory_shape[1]))
+            b_add = tf.get_variable('b_add', shape=(nb_reads, memory_shape[1]))
+            W_sigma = tf.get_variable('W_sigma', shape=(nb_reads, controller_size, 1))
+            b_sigma = tf.get_variable('b_sigma', shape=(nb_reads, 1))
+            W_xh = tf.get_variable('W_xh', shape=(input_size + nb_class, 4 * controller_size))
+            b_h = tf.get_variable('b_xh', shape=(4 * controller_size))
+            W_o = tf.get_variable('W_o', shape=(controller_size + nb_reads * memory_shape[1], nb_class))
+            b_o = tf.get_variable('b_o', shape=(nb_class))
+            W_rh = tf.get_variable('W_rh', shape=(nb_reads * memory_shape[1], 4 * controller_size))
+            W_hh = tf.get_variable('W_hh', shape=(controller_size, 4 * controller_size))
             gamma = tf.get_variable('gamma', shape=[1], initializer=tf.constant_initializer(0.95))
 
 
@@ -104,8 +99,8 @@ def memory_augmented_neural_network(input_var, target_var, \
 
         sigma_t_wr_tm_1 = tf.tile(sigma_t, tf.pack([1, 1, wr_tm1.get_shape().as_list()[2]]))
         ww_t = tf.reshape(tf.mul(sigma_t, wr_tm1), (batch_size*nb_reads, memory_shape[0]))    #(batch_size*nb_reads, memory_shape[0])
-        with tf.variable_scope("ww_t"):
-            ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))   #Update tensor done using index slicing
+        #with tf.variable_scope("ww_t"):
+        ww_t = update_tensor(ww_t, tf.reshape(wlu_tm1,[-1]),1.0 - tf.reshape(sigma_t,shape=[-1]))   #Update tensor done using index slicing
         ww_t = tf.reshape(ww_t,(batch_size, nb_reads, memory_shape[0]))
 
         with tf.variable_scope("M_t"):
