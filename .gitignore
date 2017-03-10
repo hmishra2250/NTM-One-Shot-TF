@@ -2,3 +2,4 @@
 *.whl
 =1.11.0
 *.png
+.spyproject/
