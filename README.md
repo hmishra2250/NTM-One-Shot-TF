@@ -1,4 +1,6 @@
-# One Shot Learning using Memory-Augmented Neural Networks in Tensorflow
+# One Shot Learning using Memory-Augmented Neural Networks in Tensorflow. 
+
+Written for Tensorflow v0.12. Yet to add support for Tensorflow v1*.
 
 Tensorflow implementation of the paper *One-shot Learning with Memory-Augmented Neural Networks*. 
 
