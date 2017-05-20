@@ -17,8 +17,8 @@ def update_tensor(V, dim2, val):  # Update tensor V, with index(:,dim2[:]) by va
             chg = [chg]
         else:
             chg = tf.reshape(chg, shape=[1]+chg.get_shape().as_list())
-        oob = lambda : tf.slice(tf.concat_v2([v[:d2_int], chg], axis=0), tf.range(0,len(v.get_shape().as_list())), v.get_shape().as_list())
-        inb = lambda : tf.slice(tf.concat_v2([v[:d2_int], chg, v[d2_int + 1:]], axis=0), tf.constant(0,shape=[len(v.get_shape().as_list())]), v.get_shape().as_list())
+        oob = lambda : tf.slice(tf.concat([v[:d2_int], chg], axis=0), tf.range(0,len(v.get_shape().as_list())), v.get_shape().as_list())
+        inb = lambda : tf.slice(tf.concat([v[:d2_int], chg, v[d2_int + 1:]], axis=0), tf.constant(0,shape=[len(v.get_shape().as_list())]), v.get_shape().as_list())
         return tf.cond(tf.less(d2_int + 1, v.get_shape().as_list()[0]), inb, oob)
 
     Z = tf.scan(body, elems=(V, dim2, val), initializer=tf.constant(1, shape=V.get_shape().as_list()[1:], dtype=tf.float32), name="Scan_Update")

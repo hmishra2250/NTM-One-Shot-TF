@@ -53,7 +53,7 @@ def omniglot():
     #output_var = tf.cast(output_var, tf.int32)
     target_ph_oh = tf.one_hot(target_ph, depth=generator.nb_samples)
     print 'Output, Target shapes: ',output_var.get_shape().as_list(), target_ph_oh.get_shape().as_list()
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(output_var, target_ph_oh), name="cost")
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_var, labels=target_ph_oh), name="cost")
     opt = tf.train.AdamOptimizer(learning_rate=1e-3)
     train_step = opt.minimize(cost, var_list=params)
 

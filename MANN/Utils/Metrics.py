@@ -22,15 +22,15 @@ def accuracy_instance(predictions, targets, n=[1, 2, 3, 4, 5, 10], nb_classes=5,
         t = tf.cast(t, tf.int32)
         ##Accuracy Update
         batch_range = tf.cast(tf.range(0, batch_size), dtype=tf.int32)
-        gather = tf.cast(tf.gather_nd(indices,tf.pack([tf.range(0,p.get_shape().as_list()[0]), t], axis=1)), tf.int32)
-        index = tf.cast(tf.pack([batch_range, gather], axis=1), dtype=tf.int64)
+        gather = tf.cast(tf.gather_nd(indices,tf.stack([tf.range(0,p.get_shape().as_list()[0]), t], axis=1)), tf.int32)
+        index = tf.cast(tf.stack([batch_range, gather], axis=1), dtype=tf.int64)
         val = tf.cast(tf.equal(p, t), tf.float32)
-        delta = tf.SparseTensor(indices=index, values=val, shape=tf.cast(accuracy.get_shape().as_list(), tf.int64))
+        delta = tf.SparseTensor(indices=index, values=val, dense_shape=tf.cast(accuracy.get_shape().as_list(), tf.int64))
         accuracy = accuracy + tf.sparse_tensor_to_dense(delta)
         ##Index Update
-        index = tf.cast(tf.pack([batch_range, t], axis=1), dtype=tf.int64)
+        index = tf.cast(tf.stack([batch_range, t], axis=1), dtype=tf.int64)
         val = tf.constant(1.0, shape=[batch_size])
-        delta = tf.SparseTensor(indices=index, values=val, shape=tf.cast(indices.get_shape().as_list(), dtype=tf.int64))
+        delta = tf.SparseTensor(indices=index, values=val, dense_shape=tf.cast(indices.get_shape().as_list(), dtype=tf.int64))
         indices = indices + tf.sparse_tensor_to_dense(delta)
         return [accuracy, indices]
 
